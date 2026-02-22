@@ -3,3 +3,9 @@ variable "project_id" {
   type        = string
   default     = "nyc-taxi-488014"
 }
+
+variable "region" {
+  description = "default region for GCP resources"
+  type        = string
+  default     = "europe-west1"
+}
