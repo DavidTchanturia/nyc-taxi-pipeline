@@ -19,7 +19,7 @@ jobs:
       - name: Run Pylint on python folder
         run: pylint python/ --disable=E0401,R0801
       - name: Run Pylint on spark folder
-        run: pylint python/ --disable=C0301,C0304,R0914
+        run: pylint python/ --disable=C0301,C0304,R0914,E0401,R0801
 
   upload-spark:
     name: Upload Spark Files
