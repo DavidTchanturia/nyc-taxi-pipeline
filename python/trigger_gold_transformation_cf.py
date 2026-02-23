@@ -1,12 +1,6 @@
 """
 Cloud Function — Trigger NYC Taxi Dataproc Serverless Batch
 
-Expected JSON body (all fields optional):
-  {
-    "start_date": "2025-01",   # YYYY-MM — defaults to current month - 3
-    "end_date":   "2025-03",   # YYYY-MM — defaults to current month - 3
-    "write_mode": "append"     # default: overwrite
-  }
 """
 
 import os
