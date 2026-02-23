@@ -4,10 +4,27 @@ on:
     branches:
       - master
 jobs:
+  pylint:
+    name: Pylint Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install pylint
+        run: pip install pylint
+      - name: Run Pylint on python folder
+        run: pylint python/ --disable=E0401,R0801
+      # - name: Run Pylint on spark folder
+      #   run: pylint spark/ --disable=E0401,R0801
+
   upload-spark:
     name: Upload Spark Files
     runs-on: ubuntu-latest
-    needs: terraform
+    needs: [pylint, terraform]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,7 +39,7 @@ jobs:
           destination: nyc-taxi-trips-spark-source-codes
           glob: '**'
           gzip: false
-          
+
   terraform:
     name: Terraform
     runs-on: ubuntu-latest

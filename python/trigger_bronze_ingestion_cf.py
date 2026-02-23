@@ -11,8 +11,8 @@ Expected JSON body (all fields optional):
 
 import os
 import json
-import functions_framework
 from datetime import date
+import functions_framework
 from google.cloud import dataproc_v1
 
 # ─────────────────────────────────────────────
@@ -53,10 +53,8 @@ def trigger_dataproc_batch(request):
     """HTTP Cloud Function — submits a Dataproc Serverless batch job."""
 
     # ── Parse request ─────────────────────────────────────────────────────────
-    try:
-        body = request.get_json(force=True, silent=True) or {}
-    except Exception:
-        body = {}
+    body = request.get_json(force=True, silent=True) or {}
+
 
     # Default both dates to current month - 3 if not supplied
     default_ym = default_ingest_month()
