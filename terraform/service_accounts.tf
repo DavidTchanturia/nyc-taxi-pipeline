@@ -28,6 +28,12 @@ resource "google_project_iam_member" "dataproc_bq_job" {
   member  = "serviceAccount:${google_service_account.dataproc_sa.email}"
 }
 
+resource "google_project_iam_member" "dataproc_bq_viewer" {
+  project = var.project_id
+  role    = "roles/bigquery.dataViewer"
+  member  = "serviceAccount:${google_service_account.dataproc_sa.email}"
+}
+
 # ─────────────────────────────────────────────
 # Cloud Scheduler Service Account
 # ─────────────────────────────────────────────
