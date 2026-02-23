@@ -24,10 +24,10 @@ from google.cloud import dataproc_v1
 PROJECT_ID   = os.environ.get("PROJECT_ID",   "nyc-taxi-488014")
 REGION       = os.environ.get("REGION",       "europe-west1")
 SUBNETWORK   = os.environ.get("SUBNETWORK",   "")
-SERVICE_ACCT = os.environ.get("DATAPROC_SA",  "dataproc-sa@nyc-taxi-488014.iam.gserviceaccount.com")
+SERVICE_ACCT = os.environ.get("DATAPROC_SA",  "")
 PYSPARK_FILE = os.environ.get(
     "PYSPARK_FILE",
-    "gs://nyc-taxi-trips-spark-source-codes/spark/nyc_taxi_trips_ingest_bronze_pyspark.py"
+    ""
 )
 
 
@@ -102,7 +102,6 @@ def trigger_dataproc_batch(request):
 
     operation = client.create_batch(request=request_obj)
 
-    # operation.metadata contains the batch name immediately
     batch_name = operation.metadata.batch if hasattr(operation, "metadata") else "submitted"
 
     response_body = {
