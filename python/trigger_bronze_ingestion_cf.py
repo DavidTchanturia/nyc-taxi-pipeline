@@ -57,9 +57,8 @@ def trigger_dataproc_batch(request):
         body = request.get_json(force=True, silent=True) or {}
     except Exception:
         body = {}
-        
+
     # Default both dates to current month - 3 if not supplied
-    # this is because the api itself has data only 3 months before the current date
     default_ym = default_ingest_month()
     start_date = body.get("start_date", default_ym)
     end_date   = body.get("end_date",   default_ym)
