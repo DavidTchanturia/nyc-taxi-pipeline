@@ -1,10 +1,11 @@
 ### NYC Taxi Analytics Pipeline
 
-This repository contains an end‑to‑end, production‑style data pipeline for NYC Yellow Taxi trips on Google Cloud Platform (GCP). It ingests raw TLC parquet files, lands them in a **bronze** layer on GCS and BigQuery, then transforms them into a dimensional **gold** model for analytics.
+This repository contains an end‑to‑end, data pipeline for NYC Yellow Taxi trips on Google Cloud Platform (GCP). It ingests raw TLC parquet files, lands them in a **bronze** layer on GCS and BigQuery, then transforms them into a dimensional **gold** model for analytics.
 
 ---
 
 ### High‑Level Architecture
+![Pipeline Architecture](assets/nyc_taxi_pipeline_architecture.drawio.png)
 
 - **Source data**
   - NYC TLC Yellow Taxi monthly parquet files (`yellow_tripdata_YYYY-MM.parquet`) hosted on `cloudfront`.
@@ -30,49 +31,12 @@ This repository contains an end‑to‑end, production‑style data pipeline for
 
 - **Orchestration**
   - Orchestration today is handled via **Cloud Scheduler + Cloud Function + Dataproc Serverless**.
-  - There is **no Airflow** yet (see considerations/improvements below).
-
-- **Consumption**
-  - Gold layer is designed for BI dashboards and self‑service analytics on top of `fact_trips` joined to the dim tables.
-  - **BI / dashboards are not yet included** in this repo (placeholder section below).
-
----
-
-### Tools & Technologies
-
-- **Cloud provider**
-  - Google Cloud Platform (GCP)
-
-- **Compute & orchestration**
-  - Cloud Scheduler
-  - Cloud Functions
-  - Dataproc Serverless (PySpark jobs)
-
-- **Storage & warehouse**
-  - Cloud Storage (GCS) — bronze parquet storage
-  - BigQuery — bronze and gold datasets
-
-- **Infrastructure as Code**
-  - Terraform:
-    - BigQuery datasets & tables (bronze and gold).
-    - GCS buckets (bronze bucket and spark source bucket).
-    - Service accounts & IAM bindings.
-    - Cloud Scheduler job and related IAM.
-
-- **Data processing**
-  - PySpark on Dataproc Serverless.
-  - `requests`, `gsutil` for data download and staging.
-
-- **CI/CD**
-  - GitHub Actions for Terraform deployment and Spark code upload to GCS.
-  - (Planned) Pylint and Pytest steps in the pipeline.
-
 ---
 
 ### Data Modelling & Schema
 
 ### Model Schema
-![Data Model](nyc_taxi_trips_data_model.png)
+![Data Model](assets/nyc_taxi_trips_data_model.png)
 
 - **Bronze layer (`nyc_taxi_trips_bronze`)**
   - Table: `nyc_yellow_taxi_trips_bronze`
@@ -134,6 +98,37 @@ This repository contains an end‑to‑end, production‑style data pipeline for
 
 ---
 
+### Tools & Technologies
+
+- **Cloud provider**
+  - Google Cloud Platform (GCP)
+
+- **Compute & orchestration**
+  - Cloud Scheduler
+  - Cloud Functions
+  - Dataproc Serverless (PySpark jobs)
+
+- **Storage & warehouse**
+  - Cloud Storage (GCS) — bronze parquet storage
+  - BigQuery — bronze and gold datasets
+
+- **Infrastructure as Code**
+  - Terraform:
+    - BigQuery datasets & tables (bronze and gold).
+    - GCS buckets (bronze bucket and spark source bucket).
+    - Service accounts & IAM bindings.
+    - Cloud Scheduler job and related IAM.
+
+- **Data processing**
+  - PySpark on Dataproc Serverless.
+  - `requests`, `gsutil` for data download and staging.
+
+- **CI/CD**
+  - GitHub Actions for Terraform deployment and Spark code upload to GCS.
+  - pylint for checking python codes
+
+---
+
 ### Infrastructure & Terraform
 
 - **Terraform responsibilities**
@@ -173,13 +168,6 @@ This repository contains an end‑to‑end, production‑style data pipeline for
       - Depends on Terraform job.
       - Authenticates to GCP.
       - Uploads `spark/` folder contents to GCS bucket `nyc-taxi-trips-spark-source-codes` (used by Dataproc Serverless).
-
-- **Planned CI steps (placeholders)**
-  - **Pylint step (TODO)**
-    - Add a job or step that runs `pylint` on the Python codebase before Terraform and deployment.
-  - **Pytest step (TODO)**
-    - Add a job or step that runs `pytest` (and any other tests) prior to deployment.
-
 ---
 
 ### Ingestion Logic & Scheduling
@@ -221,25 +209,11 @@ This repository contains an end‑to‑end, production‑style data pipeline for
 
 ---
 
-### BI / Analytics Layer (Placeholder)
-
-- **Current state**
-  - The schema in the gold layer is designed for downstream BI and analytics queries.
-  - No BI assets are committed to this repository yet.
-
-- **Planned**
-  - Create dashboards (e.g. Looker Studio / Looker / Power BI / Tableau) using:
-    - `fact_trips` as the main fact.
-    - Date, location, vendor, payment type, and rate code dimensions.
-  - Add documentation and, where appropriate, SQL views or data marts optimised for common dashboards.
-
----
-
 ### Considerations & Future Improvements
 
 - **Orchestration**
-  - Consider migrating orchestration to **Apache Airflow** (e.g. Cloud Composer):
-    - DAGs to explicitly manage dependencies between bronze and gold jobs.
+  - I should Consider migrating orchestration to **Apache Airflow** (e.g. Cloud Composer):
+    - DAGs to explicitly manage dependencies between bronze and gold jobs, once bronze ends gold could be triggered.
     - Better retry, backfill and SLA management.
 
 - **Dimension tables from NYC Taxi PDF**
@@ -262,18 +236,14 @@ This repository contains an end‑to‑end, production‑style data pipeline for
       - Null/invalid rate by column.
       - Threshold breaches for key business metrics.
 
-- **Cost optimisation**
-  - Tune Dataproc Serverless configuration (executors, memory, partitions) based on real usage.
-  - Optimise BigQuery partitioning and clustering strategies if query patterns evolve.
+- **environment**
+  - create dev / prod environment for development
+  - CI/CD could be modified to deploy based on tags for each environment
 
 - **Performance & scalability**
   - For larger backfills, consider:
     - Parallelising ingestion across more executors or using multiple Dataproc batches.
     - Adjusting bronze and gold table partitioning / clustering to match access patterns.
-
-- **Security & governance**
-  - Tighten IAM to follow strict least‑privilege principles.
-  - Add policies around dataset access, row‑level and column‑level security if needed.
 
 ---
 
