@@ -54,10 +54,10 @@ def trigger_dataproc_batch(request):
 
     # ── Parse request ─────────────────────────────────────────────────────────
     try:
-        body = request.get_json(force=True) or {}
+        body = request.get_json(force=True, silent=True) or {}
     except Exception:
-        return ("Invalid JSON body", 400)
-
+        body = {}
+        
     # Default both dates to current month - 3 if not supplied
     # this is because the api itself has data only 3 months before the current date
     default_ym = default_ingest_month()

@@ -14,10 +14,6 @@ resource "google_cloud_scheduler_job" "nyc_taxi_bronze_ingestion" {
       "Content-Type" = "application/json"
     }
 
-    body = base64encode(jsonencode({
-      write_mode = "overwrite"
-    }))
-
     oidc_token {
       service_account_email = google_service_account.scheduler_sa.email
       audience              = "https://trigger-bronze-ingestion-344181310958.europe-west1.run.app"
