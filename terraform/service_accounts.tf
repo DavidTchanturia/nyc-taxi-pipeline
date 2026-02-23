@@ -27,3 +27,24 @@ resource "google_project_iam_member" "dataproc_bq_job" {
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.dataproc_sa.email}"
 }
+
+# ─────────────────────────────────────────────
+# Cloud Scheduler Service Account
+# ─────────────────────────────────────────────
+resource "google_service_account" "scheduler_sa" {
+  account_id   = "scheduler-sa"
+  display_name = "Cloud Scheduler Service Account"
+  project      = var.project_id
+}
+
+resource "google_project_iam_member" "scheduler_cf_invoker" {
+  project = var.project_id
+  role    = "roles/cloudfunctions.invoker"
+  member  = "serviceAccount:${google_service_account.scheduler_sa.email}"
+}
+
+resource "google_project_iam_member" "scheduler_run_invoker" {
+  project = var.project_id
+  role    = "roles/run.invoker"
+  member  = "serviceAccount:${google_service_account.scheduler_sa.email}"
+}
