@@ -43,7 +43,7 @@ jobs:
   terraform:
     name: Terraform
     runs-on: ubuntu-latest
-    nees: [pylint, supload-sparkk]
+    needs: [pylint, supload-sparkk]
     defaults:
       run:
         working-directory: terraform
