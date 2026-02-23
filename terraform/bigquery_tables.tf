@@ -48,7 +48,6 @@ resource "google_bigquery_table" "bronze_taxi_zone_lookup" {
     { name = "Borough", type = "STRING", mode = "NULLABLE" },
     { name = "Zone", type = "STRING", mode = "NULLABLE" },
     { name = "service_zone", type = "STRING", mode = "NULLABLE" },
-    { name = "ingestion_timestamp", type = "TIMESTAMP", mode = "REQUIRED" }
   ])
 }
 
