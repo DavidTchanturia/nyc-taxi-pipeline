@@ -1,19 +1,11 @@
 """
 NYC Yellow Taxi — Bronze → Gold PySpark Pipeline
-Target month : 2025-11
-Project      : nyc-taxi-488014
-Deploy on    : GCP Dataproc
-
-Submit example:
-  gcloud dataproc jobs submit pyspark bronze_to_gold_pipeline.py \
-      --cluster=<CLUSTER_NAME> \
-      --region=<REGION> \
-      --jars=gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.12-latest.jar \
-      -- --temp_bucket=<YOUR_GCS_BUCKET>
+Processes a date range (YYYY-MM) in monthly batches.
 """
 
 import argparse
 import logging
+from datetime import date
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import IntegerType, FloatType
@@ -30,11 +22,41 @@ log = logging.getLogger("bronze_to_gold")
 # ──────────────────────────────────────────────────────────────
 def parse_args():
     parser = argparse.ArgumentParser(description="Bronze to Gold pipeline for NYC Taxi")
-    parser.add_argument("--project",    default="nyc-taxi-488014",                    help="GCP project ID")
-    parser.add_argument("--temp_bucket",default="nyc-taxi-trips-bronze",              help="GCS bucket for BQ temp files (no gs:// prefix)")
-    parser.add_argument("--month",      default="2025-11",                            help="Ingestion month filter (YYYY-MM)")
-    parser.add_argument("--write_mode", default="append",                             help="BigQuery write mode: append | overwrite")
+    parser.add_argument("--project",      default="nyc-taxi-488014",         help="GCP project ID")
+    parser.add_argument("--temp_bucket",  default="nyc-taxi-trips-bronze",   help="GCS bucket for BQ temp files (no gs:// prefix)")
+    parser.add_argument("--start-date",   required=True,                     help="Start month (YYYY-MM), inclusive")
+    parser.add_argument("--end-date",     required=True,                     help="End month (YYYY-MM), inclusive")
+    parser.add_argument("--write-mode",   default="append",               help="BigQuery write mode for first batch: overwrite | append")
     return parser.parse_args()
+
+
+# ──────────────────────────────────────────────────────────────
+# MONTH RANGE HELPER
+# ──────────────────────────────────────────────────────────────
+def month_range(start_ym: str, end_ym: str) -> list[str]:
+    """
+    Returns an ordered list of YYYY-MM strings from start_ym to end_ym inclusive.
+    E.g. month_range("2025-01", "2025-03") -> ["2025-01", "2025-02", "2025-03"]
+    """
+    def to_ym(s):
+        y, m = s.split("-")
+        return int(y), int(m)
+
+    sy, sm = to_ym(start_ym)
+    ey, em = to_ym(end_ym)
+
+    if (sy, sm) > (ey, em):
+        raise ValueError(f"start_date {start_ym} is after end_date {end_ym}")
+
+    months = []
+    y, m = sy, sm
+    while (y, m) <= (ey, em):
+        months.append(f"{y}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return months
 
 
 # ──────────────────────────────────────────────────────────────
@@ -72,7 +94,6 @@ def bq_write(df, table: str, mode: str = "append"):
 
 
 def date_id(col_name: str):
-    """Convert a timestamp column to a YYYYMMDD integer suitable for date_id FK."""
     return (
         F.year(col_name) * 10000
         + F.month(col_name) * 100
@@ -144,10 +165,6 @@ def load_dim_location(spark, project, bronze, gold):
 
 
 def load_dim_date(spark, bronze_df, project, gold, mode):
-    """
-    Build dim_date from the distinct pickup and dropoff dates present
-    in the bronze slice — only rows we actually need.
-    """
     pickup_dates  = bronze_df.select(F.to_date("tpep_pickup_datetime").alias("full_date"))
     dropoff_dates = bronze_df.select(F.to_date("tpep_dropoff_datetime").alias("full_date"))
     dates_df = (
@@ -163,7 +180,7 @@ def load_dim_date(spark, bronze_df, project, gold, mode):
         F.month("full_date").cast(IntegerType()).alias("month"),
         F.date_format("full_date", "MMMM").alias("month_name"),
         F.dayofmonth("full_date").cast(IntegerType()).alias("day"),
-        F.dayofweek("full_date").cast(IntegerType()).alias("day_of_week"),  # 1=Sun, 7=Sat
+        F.dayofweek("full_date").cast(IntegerType()).alias("day_of_week"),
         F.date_format("full_date", "EEEE").alias("day_name"),
         F.weekofyear("full_date").cast(IntegerType()).alias("week_of_year"),
         F.quarter("full_date").cast(IntegerType()).alias("quarter"),
@@ -175,19 +192,13 @@ def load_dim_date(spark, bronze_df, project, gold, mode):
     bq_write(dim_date, f"{project}.{gold}.dim_date", mode=mode)
 
 
-# ──────────────────────────────────────────────────────────────
-# FACT TABLE
-# ──────────────────────────────────────────────────────────────
 def load_fact_trips(spark, bronze_df, project, gold, mode):
     import uuid as _uuid
 
     uuid_udf = F.udf(lambda: str(_uuid.uuid4()))
 
     fact = bronze_df.select(
-        # Surrogate key
         uuid_udf().alias("trip_id"),
-
-        # Foreign keys
         F.col("VendorID").cast(IntegerType()).alias("vendor_id"),
         date_id("tpep_pickup_datetime").cast(IntegerType()).alias("pickup_date_id"),
         date_id("tpep_dropoff_datetime").cast(IntegerType()).alias("dropoff_date_id"),
@@ -195,18 +206,12 @@ def load_fact_trips(spark, bronze_df, project, gold, mode):
         F.col("DOLocationID").cast(IntegerType()).alias("dropoff_location_id"),
         F.col("payment_type").cast(IntegerType()).alias("payment_type_id"),
         F.col("RatecodeID").cast(IntegerType()).alias("rate_code_id"),
-
-        # Degenerate dimension
         F.col("store_and_fwd_flag"),
-
-        # Timestamps & derived metric
         F.col("tpep_pickup_datetime").alias("pickup_timestamp"),
         F.col("tpep_dropoff_datetime").alias("dropoff_timestamp"),
         (
             (F.unix_timestamp("tpep_dropoff_datetime") - F.unix_timestamp("tpep_pickup_datetime")) / 60.0
         ).cast(FloatType()).alias("trip_duration_minutes"),
-
-        # Measures
         F.col("passenger_count").cast(IntegerType()).alias("passenger_count"),
         F.col("trip_distance").cast(FloatType()).alias("trip_distance"),
         F.col("fare_amount").cast("decimal(10,2)").alias("fare_amount"),
@@ -218,8 +223,6 @@ def load_fact_trips(spark, bronze_df, project, gold, mode):
         F.col("congestion_surcharge").cast("decimal(10,2)").alias("congestion_surcharge"),
         F.col("airport_fee").cast("decimal(10,2)").alias("airport_fee"),
         F.col("total_amount").cast("decimal(10,2)").alias("total_amount"),
-
-        # Pipeline metadata
         F.col("ingestion_month"),
     ).filter(
         F.col("tpep_pickup_datetime").isNotNull() &
@@ -233,55 +236,75 @@ def load_fact_trips(spark, bronze_df, project, gold, mode):
 
 
 # ──────────────────────────────────────────────────────────────
+# PROCESS A SINGLE MONTH
+# ──────────────────────────────────────────────────────────────
+def process_month(spark, bronze_raw, month: str, project: str, gold: str, fact_mode: str, date_mode: str):
+    """Filter bronze to a single month and load dim_date + fact_trips."""
+    log.info(f"── Processing month: {month} (fact_mode={fact_mode}) ──")
+
+    bronze_df = bronze_raw.filter(F.col("ingestion_month") == month).cache()
+    row_count = bronze_df.count()
+    log.info(f"  Bronze rows for {month}: {row_count:,}")
+
+    if row_count == 0:
+        log.warning(f"  No rows found for month={month}. Skipping.")
+        bronze_df.unpersist()
+        return
+
+    load_dim_date(spark, bronze_df, project, gold, date_mode)
+    load_fact_trips(spark, bronze_df, project, gold, fact_mode)
+
+    bronze_df.unpersist()
+    log.info(f"── Completed month: {month} ──")
+
+
+# ──────────────────────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────────────────────
 def main():
-    args   = parse_args()
+    args    = parse_args()
     PROJECT = args.project
     BRONZE  = "nyc_taxi_trips_bronze"
     GOLD    = "nyc_taxi_trips_gold"
-    MONTH   = args.month
-    MODE    = args.write_mode
+    start_date = args.start_date
+    end_date   = args.end_date
+    base_mode  = args.write_mode
+
+    months = month_range(start_date, end_date)
+    log.info(f"Pipeline started — months={months}, write_mode={base_mode}")
 
     spark = build_spark(PROJECT, args.temp_bucket)
-    log.info(f"Pipeline started — month={MONTH}, project={PROJECT}, write_mode={MODE}")
 
-    # ── Read & filter bronze to target month ────────────────────
-    bronze_raw = bq_read(spark, f"{PROJECT}.{BRONZE}.nyc_yellow_taxi_trips_bronze")
-    bronze_df  = bronze_raw.filter(F.col("ingestion_month") == MONTH).cache()
-
-    row_count = bronze_df.count()
-    log.info(f"Bronze rows loaded for {MONTH}: {row_count:,}")
-
-    if row_count == 0:
-        log.warning(f"No rows found in bronze for month={MONTH}. Exiting early.")
-        spark.stop()
-        return
-
-    # ── Small / static dimensions — always fully overwrite ──────
-    log.info("Loading dim_vendor …")
+    # ── Static dimensions — always overwrite once at the start ──
+    log.info("Loading static dimensions …")
     load_dim_vendor(spark, PROJECT, GOLD)
-
-    log.info("Loading dim_payment_type …")
     load_dim_payment_type(spark, PROJECT, GOLD)
-
-    log.info("Loading dim_rate_code …")
     load_dim_rate_code(spark, PROJECT, GOLD)
-
-    log.info("Loading dim_location …")
     load_dim_location(spark, PROJECT, BRONZE, GOLD)
 
-    # ── Date dimension — derived from the current bronze slice ──
-    log.info("Loading dim_date …")
-    load_dim_date(spark, bronze_df, PROJECT, GOLD, MODE)
+    # ── Read bronze with BQ-side filter covering the entire date range ──
+    # The `filter` option is pushed down to BigQuery Storage API as a row restriction,
+    # so only the relevant months are transferred over the wire.
+    bq_filter = (
+        f"ingestion_month >= '{start_date}' AND ingestion_month <= '{end_date}'"
+    )
+    log.info(f"Reading bronze with BQ filter: {bq_filter}")
+    bronze_raw = (
+        spark.read
+        .format("bigquery")
+        .option("table", f"{PROJECT}.{BRONZE}.nyc_yellow_taxi_trips_bronze")
+        .option("filter", bq_filter)
+        .load()
+    )
 
-    # ── Fact table ──────────────────────────────────────────────
-    log.info("Loading fact_trips …")
-    load_fact_trips(spark, bronze_df, PROJECT, GOLD, MODE)
+    # ── Iterate months ──────────────────────────────────────────
+    for i, month in enumerate(months):
+        fact_mode = base_mode if i == 0 else "append"
+        date_mode = base_mode if i == 0 else "append"
+        process_month(spark, bronze_raw, month, PROJECT, GOLD, fact_mode, date_mode)
 
-    log.info("Pipeline completed successfully.")
+    log.info("All months processed. Pipeline completed successfully.")
     spark.stop()
-
 
 if __name__ == "__main__":
     main()
