@@ -28,7 +28,7 @@ resource "google_cloud_scheduler_job" "nyc_taxi_bronze_ingestion" {
 
 
 resource "google_cloud_scheduler_job" "nyc_taxi_gold_transformation" {
-  name        = "nyc-taxi-bronze-monthly-ingestion"
+  name        = "nyc_taxi_gold_transformation"
   description = "Triggers NYC Taxi gold transformation CF on the 1st of every month"
   schedule    = "0 1 1 * *"
   time_zone   = "Europe/Dublin"
