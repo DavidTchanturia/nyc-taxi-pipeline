@@ -21,12 +21,34 @@ log = logging.getLogger("bronze_to_gold")
 # ARG PARSING
 # ──────────────────────────────────────────────────────────────
 def parse_args():
+    """Parse command-line arguments for the Bronze to Gold pipeline."""
     parser = argparse.ArgumentParser(description="Bronze to Gold pipeline for NYC Taxi")
-    parser.add_argument("--project",      default="nyc-taxi-488014",         help="GCP project ID")
-    parser.add_argument("--temp_bucket",  default="nyc-taxi-trips-bronze",   help="GCS bucket for BQ temp files (no gs:// prefix)")
-    parser.add_argument("--start-date",   required=True,                     help="Start month (YYYY-MM), inclusive")
-    parser.add_argument("--end-date",     required=True,                     help="End month (YYYY-MM), inclusive")
-    parser.add_argument("--write-mode",   default="append",               help="BigQuery write mode for first batch: overwrite | append")
+
+    parser.add_argument(
+        "--project",      
+        default="nyc-taxi-488014",        
+        help="GCP project ID")
+
+    parser.add_argument(
+        "--temp_bucket",  
+        default="nyc-taxi-trips-bronze",
+        help="GCS bucket for BQ temp files (no gs:// prefix)")
+
+    parser.add_argument(
+        "--start-date",   
+        required=True,
+        help="Start month (YYYY-MM), inclusive")
+
+    parser.add_argument(
+        "--end-date",     
+        required=True,
+        help="End month (YYYY-MM), inclusive")
+
+    parser.add_argument(
+        "--write-mode",   
+        default="append",
+        help="BigQuery write mode for first batch: overwrite | append")
+
     return parser.parse_args()
 
 
@@ -39,6 +61,7 @@ def month_range(start_ym: str, end_ym: str) -> list[str]:
     E.g. month_range("2025-01", "2025-03") -> ["2025-01", "2025-02", "2025-03"]
     """
     def to_ym(s):
+        """Parse a YYYY-MM string into a (year, month) integer tuple."""
         y, m = s.split("-")
         return int(y), int(m)
 
@@ -63,6 +86,7 @@ def month_range(start_ym: str, end_ym: str) -> list[str]:
 # SPARK SESSION
 # ──────────────────────────────────────────────────────────────
 def build_spark(project: str, temp_bucket: str) -> SparkSession:
+    """Build and configure a SparkSession with BigQuery connector settings."""
     spark = (
         SparkSession.builder
         .appName("nyc_taxi_bronze_to_gold")
@@ -79,10 +103,12 @@ def build_spark(project: str, temp_bucket: str) -> SparkSession:
 # HELPERS
 # ──────────────────────────────────────────────────────────────
 def bq_read(spark: SparkSession, table: str):
+    """Read a BigQuery table into a Spark DataFrame."""
     return spark.read.format("bigquery").option("table", table).load()
 
 
 def bq_write(df, table: str, mode: str = "append"):
+    """Write a Spark DataFrame to a BigQuery table."""
     (
         df.write
         .format("bigquery")
@@ -94,6 +120,7 @@ def bq_write(df, table: str, mode: str = "append"):
 
 
 def date_id(col_name: str):
+    """Generate a numeric YYYYMMDD surrogate key from a date or timestamp column."""
     return (
         F.year(col_name) * 10000
         + F.month(col_name) * 100
@@ -136,24 +163,28 @@ RATE_CODE_MAP = {
 # DIMENSION LOADERS
 # ──────────────────────────────────────────────────────────────
 def load_dim_vendor(spark, project, gold):
+    """Create and overwrite the dim_vendor dimension table in BigQuery."""
     rows = [(k, v) for k, v in VENDOR_MAP.items()]
     df = spark.createDataFrame(rows, ["vendor_id", "vendor_name"])
     bq_write(df, f"{project}.{gold}.dim_vendor", mode="overwrite")
 
 
 def load_dim_payment_type(spark, project, gold):
+    """Create and overwrite the dim_payment_type dimension table in BigQuery."""
     rows = [(k, v) for k, v in PAYMENT_MAP.items()]
     df = spark.createDataFrame(rows, ["payment_type_id", "payment_type_desc"])
     bq_write(df, f"{project}.{gold}.dim_payment_type", mode="overwrite")
 
 
 def load_dim_rate_code(spark, project, gold):
+    """Create and overwrite the dim_rate_code dimension table in BigQuery."""
     rows = [(k, v) for k, v in RATE_CODE_MAP.items()]
     df = spark.createDataFrame(rows, ["rate_code_id", "rate_code_desc"])
     bq_write(df, f"{project}.{gold}.dim_rate_code", mode="overwrite")
 
 
 def load_dim_location(spark, project, bronze, gold):
+    """Load dim_location from the Bronze taxi zone lookup table into BigQuery."""
     zone_df = bq_read(spark, f"{project}.{bronze}.taxi_zone_lookup")
     dim_location = zone_df.select(
         F.col("LocationID").cast(IntegerType()).alias("location_id"),
@@ -165,6 +196,7 @@ def load_dim_location(spark, project, bronze, gold):
 
 
 def load_dim_date(spark, bronze_df, project, gold, mode):
+    """Build and write the dim_date dimension table from pickup and dropoff dates in the Bronze DataFrame."""
     pickup_dates  = bronze_df.select(F.to_date("tpep_pickup_datetime").alias("full_date"))
     dropoff_dates = bronze_df.select(F.to_date("tpep_dropoff_datetime").alias("full_date"))
     dates_df = (
@@ -193,6 +225,7 @@ def load_dim_date(spark, bronze_df, project, gold, mode):
 
 
 def load_fact_trips(spark, bronze_df, project, gold, mode):
+    """Build and write the fact_trips table from the Bronze DataFrame, filtering out invalid records."""
     import uuid as _uuid
 
     uuid_udf = F.udf(lambda: str(_uuid.uuid4()))
@@ -262,6 +295,7 @@ def process_month(spark, bronze_raw, month: str, project: str, gold: str, fact_m
 # MAIN
 # ──────────────────────────────────────────────────────────────
 def main():
+    """Entry point for the Bronze to Gold pipeline."""
     args    = parse_args()
     PROJECT = args.project
     BRONZE  = "nyc_taxi_trips_bronze"

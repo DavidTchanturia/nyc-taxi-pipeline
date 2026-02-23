@@ -15,8 +15,7 @@ import os
 import subprocess
 import tempfile
 import argparse
-from datetime import datetime, timezone, date
-import calendar
+from datetime import datetime, timezone
 
 import requests
 from pyspark.sql import SparkSession
@@ -82,6 +81,9 @@ def month_range(start_ym: str, end_ym: str):
 
 
 def download_to_gcs(url: str, gcs_staging: str) -> str:
+    """
+    downloads parquet file to staging bucket
+    """
     print(f"[download] Fetching: {url}")
     response = requests.get(url, stream=True, timeout=180)
     response.raise_for_status()
@@ -105,6 +107,9 @@ def download_to_gcs(url: str, gcs_staging: str) -> str:
 
 
 def write_to_gcs(df, bronze_bucket: str, year: int, month: int, write_mode: str):
+    """
+    writes parquet file to bronze bucket
+    """
     output_path = f"{bronze_bucket}/year={year}/month={month:02d}"
     print(f"[gcs] Writing parquet to: {output_path}")
     df.coalesce(4).write.mode(write_mode).parquet(output_path)
@@ -112,6 +117,7 @@ def write_to_gcs(df, bronze_bucket: str, year: int, month: int, write_mode: str)
 
 
 def write_to_bigquery(df, bq_table: str, write_mode: str):
+    """write data to bigquery table"""
     print(f"[bigquery] Writing to: {bq_table}")
     (
         df.write
@@ -128,6 +134,10 @@ def write_to_bigquery(df, bq_table: str, write_mode: str):
 
 
 def ingest_month(spark, year: int, month: int, args):
+    """
+    if multiple arguments are provided to the process, e.g date range.
+    downloads data in batches in months
+    """
     print(f"\n{'='*60}")
     print(f"[pipeline] Processing {year}-{month:02d}")
     print(f"{'='*60}")
@@ -183,6 +193,7 @@ def ingest_month(spark, year: int, month: int, args):
 
 
 def main():
+    """main entry point of pyspark job"""
     parser = argparse.ArgumentParser(description="NYC Taxi Dual-Sink Ingestion Pipeline")
     parser.add_argument("--start-date",    required=True,  help="Start month YYYY-MM")
     parser.add_argument("--end-date",      required=True,  help="End month YYYY-MM")

@@ -71,6 +71,9 @@ This repository contains an end‑to‑end, production‑style data pipeline for
 
 ### Data Modelling & Schema
 
+### Model Schema
+![Data Model](nyc_taxi_trips_data_model.png)
+
 - **Bronze layer (`nyc_taxi_trips_bronze`)**
   - Table: `nyc_yellow_taxi_trips_bronze`
   - Created and managed via **Terraform** (`terraform/bigquery_tables.tf`).
