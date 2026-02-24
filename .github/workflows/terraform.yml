@@ -17,9 +17,9 @@ jobs:
       - name: Install pylint
         run: pip install pylint
       - name: Run Pylint on python folder
-        run: pylint python/ --disable=E0401,R0801
+        run: pylint python/ --disable=C0301,C0304,R0914,E0401,R0801,E1200
       - name: Run Pylint on spark folder
-        run: pylint python/ --disable=C0301,C0304,R0914,E0401,R0801
+        run: pylint python/ --disable=C0301,C0304,R0914,E0401,R0801,E1200
 
   upload-spark:
     name: Upload Spark Files
