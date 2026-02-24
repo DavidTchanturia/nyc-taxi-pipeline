@@ -10,7 +10,7 @@ import functions_framework
 from google.cloud import dataproc_v1
 
 # ─────────────────────────────────────────────
-# Config — override via environment variables
+# Config — sa and pyspark file path will be provided to cf from environment variables
 # ─────────────────────────────────────────────
 PROJECT_ID   = os.environ.get("PROJECT_ID",   "nyc-taxi-488014")
 REGION       = os.environ.get("REGION",       "europe-west1")

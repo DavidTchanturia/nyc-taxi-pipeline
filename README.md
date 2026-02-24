@@ -96,6 +96,11 @@ This repository contains an end‑to‑end, data pipeline for NYC Yellow Taxi tr
       - Metadata:
         - `ingestion_month` for tracking which bronze ingestion slice the record came from.
 
+  - **NOTE**
+    - gold pyspark job is creating mapping dimention tables with hardcoded values, as mapping were available on their ebside, described in PDF file. link to the file
+    [nyc taxi trips mapping values](https://www.nyc.gov/assets/tlc/downloads/pdf/data_dictionary_trip_records_yellow.pdf)
+
+
 ---
 
 ### Tools & Technologies
@@ -106,7 +111,7 @@ This repository contains an end‑to‑end, data pipeline for NYC Yellow Taxi tr
 - **Compute & orchestration**
   - Cloud Scheduler
   - Cloud Functions
-  - Dataproc Serverless (PySpark jobs)
+  - Dataproc batches (PySpark jobs)
 
 - **Storage & warehouse**
   - Cloud Storage (GCS) — bronze parquet storage
@@ -129,23 +134,6 @@ This repository contains an end‑to‑end, data pipeline for NYC Yellow Taxi tr
 
 ---
 
-### Infrastructure & Terraform
-
-- **Terraform responsibilities**
-  - **BigQuery**
-    - `nyc_taxi_trips_bronze` and `nyc_taxi_trips_gold` datasets.
-    - All main tables: bronze trip table, bronze lookup table, all gold dims, and `fact_trips`.
-  - **Storage**
-    - GCS bronze bucket for ingestion.
-    - GCS bucket used to store Spark source code uploaded by CI (e.g. `nyc-taxi-trips-spark-source-codes`).
-  - **IAM & Service Accounts**
-    - Dataproc service account with Storage, BigQuery and Dataproc roles.
-    - Scheduler service account with Cloud Functions and Cloud Run invoker roles.
-  - **Scheduler**
-    - `google_cloud_scheduler_job.nyc_taxi_bronze_ingestion` which triggers the Cloud Function on the 1st of every month at 00:00 UTC.
-
----
-
 ### CI/CD Workflow (GitHub Actions)
 
 - **Workflow file**
@@ -165,9 +153,11 @@ This repository contains an end‑to‑end, data pipeline for NYC Yellow Taxi tr
         - `terraform plan`
         - `terraform apply -auto-approve`
     - **Upload Spark job**
-      - Depends on Terraform job.
+      - Depends on Terraform job and pylint job.
       - Authenticates to GCP.
       - Uploads `spark/` folder contents to GCS bucket `nyc-taxi-trips-spark-source-codes` (used by Dataproc Serverless).
+    - **pylint job**
+      - checks source codes in python/ and spark/ subfolders
 ---
 
 ### Ingestion Logic & Scheduling
@@ -197,19 +187,7 @@ This repository contains an end‑to‑end, data pipeline for NYC Yellow Taxi tr
 
 ---
 
-### Monitoring (Placeholder)
-
-- **Current state**
-  - Basic logging is implemented in the PySpark jobs and Cloud Function.
-  - No dedicated centralised monitoring / alerting layer has been implemented yet.
-
-- **Planned**
-  - Integrate with **Cloud Logging** and **Cloud Monitoring** dashboards.
-  - Add alerts for failed Dataproc batches, scheduler misfires, and anomalous row counts.
-
----
-
-### Considerations & Future Improvements
+### Considerations & Future Improvements $ doubts
 
 - **Orchestration**
   - I should Consider migrating orchestration to **Apache Airflow** (e.g. Cloud Composer):
@@ -221,6 +199,11 @@ This repository contains an end‑to‑end, data pipeline for NYC Yellow Taxi tr
   - Potential improvements:
     - Automatically ingest official reference files (if available).
     - Store reference mappings in a dedicated reference dataset/table instead of embedding in code.
+
+- **environment**
+  - create dev / prod environment for development
+  - CI/CD could be modified to deploy based on tags for each environment
+
 
 - **Service account separation**
   - Today, a single Dataproc service account is used for both bronze and gold Spark jobs.
@@ -236,20 +219,7 @@ This repository contains an end‑to‑end, data pipeline for NYC Yellow Taxi tr
       - Null/invalid rate by column.
       - Threshold breaches for key business metrics.
 
-- **environment**
-  - create dev / prod environment for development
-  - CI/CD could be modified to deploy based on tags for each environment
-
 - **Performance & scalability**
   - For larger backfills, consider:
     - Parallelising ingestion across more executors or using multiple Dataproc batches.
     - Adjusting bronze and gold table partitioning / clustering to match access patterns.
-
----
-
-### Local Development Notes
-
-- Python environment and local tooling (pylint, pytest, etc.) are expected but not fully wired into CI yet.
-- When running locally, ensure you have:
-  - Access to a GCP project with the required APIs enabled.
-  - Application Default Credentials or service account JSON for BigQuery and GCS access.
